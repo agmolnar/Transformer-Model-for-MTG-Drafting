@@ -14,13 +14,14 @@ The following will preprocess the data and store it:
                           --draft_data path/to/draft/data.csv \
                           --expansion_fname path/to/expansion.pkl
 ```
-
+python mtg\scripts\preprocess.py --expansion DMU --draft_data mtg\data\finaltrain.csv --expansion_fname mtg\data\expansiontrain_full.pkl
 Now, you can run the script to train the draft model using the preprocessed data.
 
 ```
 >>> python train_drafter.py  --expansion_fname path/to/expansion.pkl \
                              --model_name path/to/draft_model
 ```
+python mtg\scripts\train_drafter.py --expansion_fname mtg\data\expansiontrain_full.pkl --model_name mtg\data\draft_model_full_noweight
 
 And the same for the deckbuilder model. Note, that it is advised to train the draft model first so that you can use the embeddings from it in the deckbuilder model:
 

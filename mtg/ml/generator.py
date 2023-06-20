@@ -1,5 +1,5 @@
 import gc
-
+import pickle
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -18,11 +18,13 @@ class MTGDataGenerator(Sequence):
         to_fit=True,
         exclude_basics=True,
         store_basics=False,
+        add_ranks=False,
     ):
         self.cards = cards.sort_values(by="idx", ascending=True)
         self.card_col_prefixes = card_col_prefixes
         self.exclude_basics = exclude_basics
         self.store_basics = store_basics
+        self.add_ranks = add_ranks
         if self.exclude_basics:
             self.cards = self.cards.iloc[5:, :]
             self.cards["idx"] = self.cards["idx"] - 5
@@ -30,7 +32,7 @@ class MTGDataGenerator(Sequence):
         self.shuffle = shuffle
         self.to_fit = to_fit
         self.n_cards = self.cards.shape[0]
-        self.generate_global_data(data)
+        self.generate_global_data(data, add_ranks)
         self.size = data.shape[0]
         # generate initial indices for batching the data
         self.reset_indices()
@@ -59,7 +61,7 @@ class MTGDataGenerator(Sequence):
     def card_idx_to_name(self, card_idx, exclude_basics=True):
         return self.cards[self.cards["idx"] == card_idx]["name"].iloc[0]
 
-    def generate_global_data(self, data):
+    def generate_global_data(self, data, add_ranks=False):
         self.all_cards = [col.split("_", 1)[-1] for col in data.columns if col.startswith(self.card_col_prefixes[0])]
         basics = ["plains", "island", "swamp", "mountain", "forest"]
         if self.exclude_basics:
@@ -81,6 +83,9 @@ class MTGDataGenerator(Sequence):
             self.weights = data["ml_weights"].values
         else:
             self.weights = None
+        if add_ranks:
+            data["rank"] = data["rank"].fillna("bronze")
+            self.ranks = data["rank"]
 
     def __getitem__(self, batch_number):
         """
@@ -89,12 +94,15 @@ class MTGDataGenerator(Sequence):
         return: X and y when fitting. X only when predicting
         """
         indices = self.indices[batch_number * self.batch_size : (batch_number + 1) * self.batch_size]
-        X, y, weights = self.generate_data(indices)
-
-        if self.to_fit:
-            return X, y, weights
+        if self.add_ranks:
+            X, y, weights, ranks = self.generate_data(indices)
+            return X, y, weights, ranks
         else:
-            return X
+            X, y, weights = self.generate_data(indices)
+            if self.to_fit:
+                return X, y, weights
+            else:
+                return X
 
     def generate_data(self, indices):
         raise NotImplementedError
@@ -110,6 +118,7 @@ class DraftGenerator(MTGDataGenerator):
         to_fit=True,
         exclude_basics=True,
         store_basics=False,
+        add_ranks=False,
     ):
         super().__init__(
             data,
@@ -120,12 +129,13 @@ class DraftGenerator(MTGDataGenerator):
             to_fit=to_fit,
             exclude_basics=exclude_basics,
             store_basics=store_basics,
+            add_ranks=add_ranks,
         )
         # overwrite the size to make sure we always sample full drafts
         self.size = len(self.draft_ids)
         self.reset_indices()
 
-    def generate_global_data(self, data):
+    def generate_global_data(self, data, add_ranks=False):
         self.draft_ids = data["draft_id"].unique()
         self.t = data["position"].max() + 1
         data = data.set_index(["draft_id", "position"])
@@ -153,6 +163,11 @@ class DraftGenerator(MTGDataGenerator):
             self.weights = data["ml_weights"]
         else:
             self.weights = None
+        if add_ranks:
+            data["rank"] = data["rank"].fillna("bronze")
+            self.ranks = data["rank"]
+        else:
+            self.ranks = None
         name_to_idx_mapping = {
             k.split("//")[0].strip().lower(): v for k, v in self.cards.set_index("name")["idx"].to_dict().items()
         }
@@ -176,12 +191,19 @@ class DraftGenerator(MTGDataGenerator):
             )
         else:
             weights = None
+        if self.add_ranks:
+            ranks = self.ranks.loc[draft_ids].values.reshape(len(indices), self.t)
+        else:
+            ranks = None
         # convert to tensor needed for #tf.function
         packs = tf.convert_to_tensor(packs.astype(np.float32), dtype=tf.float32)
         positions = tf.convert_to_tensor(positions.astype(np.int32), dtype=tf.int32)
         picks = tf.convert_to_tensor(picks.astype(np.float32), dtype=tf.int32)
         shifted_picks = tf.convert_to_tensor(shifted_picks.astype(np.float32), dtype=tf.int32)
-        return (packs, shifted_picks, positions), picks, weights
+        if ranks is not None:
+            return (packs, shifted_picks, positions), picks, weights, ranks
+        else:
+            return (packs, shifted_picks, positions), picks, weights
 
 
 class DeckGenerator(MTGDataGenerator):
@@ -298,18 +320,29 @@ def create_train_and_val_gens(
     cards,
     id_col=None,
     train_p=1.0,
-    weights=True,
+    # since our goal is imitating humans, we disable weights
+    weights=False,
     train_batch_size=32,
     shuffle=True,
     to_fit=True,
     exclude_basics=True,
     generator=MTGDataGenerator,
     include_val=True,
+    external_val=False,
+    part_train=False,
+    part_val=False,
+    test_set=False,
+    add_ranks=False,
     **kwargs,
 ):
+    column_order = data.columns
     if weights and "ml_weights" not in data.columns:
         data["ml_weights"] = importance_weighting(data)
-    if train_p < 1.0:
+    if part_train:
+        train_rows_to_remove = 5779788
+        #train_rows_to_remove = 5384820
+        data = data.drop(data.tail(train_rows_to_remove).index)
+    if train_p < 1.0 and external_val==False:
         if id_col is None:
             idxs = np.arange(data.shape[0])
             train_idxs = np.random.choice(idxs, int(len(idxs) * train_p), replace=False)
@@ -326,6 +359,25 @@ def create_train_and_val_gens(
     else:
         train_data = data
         test_data = None
+        
+        # using your own validation/test sets, enabling model comparison
+        if external_val:
+            if test_set:
+                with open("mtg/data/expansiontest_fullfixed.pkl", "rb") as f:
+                    valexpansion = pickle.load(f)
+            else:
+                with open("mtg/data/expansionval_fullfixed.pkl", "rb") as f:
+                    valexpansion = pickle.load(f)
+            test_data = valexpansion.draft
+            test_data = test_data.reindex(columns=column_order)
+            n_test = len(test_data[id_col].unique())
+            # if weights and "ml_weights" not in test_data.columns:
+            #     test_data["ml_weights"] = data["ml_weights"]
+            if part_val:
+                val_rows_to_remove = 595728
+                #val_rows_to_remove = 504000
+                test_data = test_data.drop(test_data.tail(val_rows_to_remove).index)
+
     train_gen = generator(
         train_data,
         cards.copy(),
@@ -345,6 +397,7 @@ def create_train_and_val_gens(
             shuffle=shuffle,
             to_fit=to_fit,
             exclude_basics=exclude_basics,
+            add_ranks=add_ranks,
             **kwargs,
         )
     else:

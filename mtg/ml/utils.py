@@ -18,8 +18,9 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
         self.warmup_steps = warmup_steps
 
     def __call__(self, step):
-        arg1 = tf.math.rsqrt(step)
-        arg2 = step * (self.warmup_steps ** -1.5)
+        arg1 = tf.math.rsqrt(float(step))
+        arg2 = int(step) * (self.warmup_steps ** -1.5)
+        # casting was necessary here, otherwise we get a type error
 
         return tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2)
 
@@ -42,25 +43,25 @@ def importance_weighting(df, minim=0.1, maxim=1.0):
         a_max=maxim,
     )
 
-    last = df["date"].max()
+    #last = df["date"].max()
     # increase importance factor for recent data points according to number of weeks from most recent data point
-    n_weeks = df["date"].apply(lambda x: (last - x).days // 7)
+    #n_weeks = df["date"].apply(lambda x: (last - x).days // 7)
     # lower the value of pxp11 +
-    if "position" in df.columns:
-        pack_size = (df["position"].max() + 1) / 3
-        pick_nums = df["position"] % pack_size + 1
+    #if "position" in df.columns:
+    #    pack_size = (df["position"].max() + 1) / 3
+    #    pick_nums = df["position"] % pack_size + 1
         # alpha default to this (~0.54) because it places highest
         # importance in the beginning of the pack, but lower on PxP1
         # to help reduce rare drafting. Nice property of PxP1 ~= PxP8
-        alpha = np.e / 5.0
-        position_scale = pick_nums.apply(lambda x: (np.log(x) + 1) / np.power(x, alpha))
-    else:
-        position_scale = 1.0
+    #    alpha = np.e / 5.0
+    #    position_scale = pick_nums.apply(lambda x: (np.log(x) + 1) / np.power(x, alpha))
+    #else:
+    #    position_scale = 1.0
     return (
-        position_scale
-        * scaled_win_rate
+        #position_scale *
+        scaled_win_rate
         * np.clip(df["won"], a_min=0.5, a_max=1.0)
-        * 0.9 ** n_weeks
+        #* 0.9 ** n_weeks
     )
 
 

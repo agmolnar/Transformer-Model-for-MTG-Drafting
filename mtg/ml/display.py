@@ -12,7 +12,7 @@ from mtg.obj.dataloading_utils import get_draft_json
 def display_deck(pool, basics, spells, cards, return_url=False):
     """
     given deckbuilder model output, return either the text of the build or a link
-     to sealeddeck.tech
+    to sealeddeck.tech
     """
     pool = np.squeeze(pool)
     basics = np.squeeze(basics)
@@ -255,9 +255,13 @@ def draft_log_ai(
         att = {"pack": attention[0], "pick": attention[1][0], "final": attention[1][1]}
         for att_name, att_vec in att.items():
             # plot attention, shifted right if we're visualizing pick attention
-            att_loc = os.path.join(location, att_name, shift=att_name == "pick")
+            att_loc = os.path.join(location, att_name)
+            if att_name == "pick":
+                shift = True
+            else:
+                shift = False
             # index because shape is (1, n_heads, seq, seq)
-            save_att_to_dir(att_vec[0], att_loc)
+            save_att_to_dir(att_vec[0], att_loc, shift)
 
     predictions = tf.math.top_k(output, k=3).indices.numpy()
     predicted_picks = [idx_to_name[pred[0]] for pred in predictions]
@@ -381,7 +385,7 @@ def build_decks(model, pool, cards=None):
 def recalibrate_basics(built_deck, cards, verbose=False):
     """
     heuristic modification of basics in deckbuild to avoid OOD yielding
-     weird manabases (e.g. basic that cant cast anything)
+    weird manabases (e.g. basic that cant cast anything)
 
     --> eventually this will not be necessary, once deckbuilder improves
     """

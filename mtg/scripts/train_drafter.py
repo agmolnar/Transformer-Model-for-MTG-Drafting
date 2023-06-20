@@ -9,15 +9,27 @@ import tensorflow as tf
 def main():
     with open(FLAGS.expansion_fname, "rb") as f:
         expansion = pickle.load(f)
+    # to remove card information (scryfall) data, we only keep name and idx columns
+    scryfall=FLAGS.scryfall
+    if scryfall is False:
+        expansion.cards = expansion.cards[["name", "idx"]]
+    # to remove card ratings (17lands) data, we set every value to 0
+    cardperf=FLAGS.cardperf
+    if cardperf is False:
+        for col in expansion.card_data_for_ML.columns:
+            expansion.card_data_for_ML[col].values[:] = 0
+    # comment out to keep card info and/or ratings
 
     train_gen, val_gen = create_train_and_val_gens(
         expansion.draft,
         expansion.cards.copy(),
         train_p=FLAGS.train_p,
+        weights=FLAGS.weights,
         id_col="draft_id",
         train_batch_size=FLAGS.batch_size,
         generator=DraftGenerator,
         include_val=True,
+        external_val=True,
     )
 
     model = DraftBot(
@@ -48,7 +60,10 @@ def main():
     )
     trainer.train(
         FLAGS.epochs,
-        print_keys=["prediction_loss", "embedding_loss", "rare_loss", "cmc_loss"],
+        print_keys=[
+                    #"prediction_loss", "embedding_loss", 
+                    #"rare_loss", "cmc_loss"
+                    ],
         verbose=FLAGS.verbose,
     )
     # we run inference once before saving the model in order to serialize it with the right input parameters for inference
@@ -167,6 +182,24 @@ if __name__ == "__main__":
         type=str,
         default="draft_model",
         help="path/to/draft_model where the model will be stored",
+    )
+    parser.add_argument(
+        "--scryfall",
+        type=bool,
+        default=True,
+        help="If False, Scryfall card stats will be removed from the data",
+    )
+    parser.add_argument(
+        "--cardperf",
+        type=bool,
+        default=True,
+        help="If False, 17lands card performance data will be removed from the data",
+    )
+    parser.add_argument(
+    "--weights",
+    type=bool,
+    default=False,
+    help="If True, importance weighting will be added to the data",
     )
 
     FLAGS, unparsed = parser.parse_known_args()

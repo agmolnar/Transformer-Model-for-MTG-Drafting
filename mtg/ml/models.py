@@ -277,7 +277,7 @@ class DraftBot(tf.Module):
                 learning_rate=learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9
             )
         else:
-            self.optimizer = optimizer
+            self.optimizer = tf.keras.optimizers.get(optimizer)
         # because our output is softmax, CategoricalCrossentropy is the proper loss function
         self.loss_f = tf.keras.losses.SparseCategoricalCrossentropy(reduction=tf.keras.losses.Reduction.SUM)
         self.margin = margin
@@ -328,12 +328,12 @@ class DraftBot(tf.Module):
             tf.reduce_sum(tf.maximum(dist_loss + self.margin, 0.0), axis=-1) * sample_weight
         )
         # compute loss from expert priors (e.g. no rare drafting, take cheaper cards)
-        self.bad_behavior_loss = self.determine_bad_behavior(true, pred, sample_weight=sample_weight)
+        #self.bad_behavior_loss = self.determine_bad_behavior(true, pred, sample_weight=sample_weight)
 
         return (
             self.pred_lambda * self.prediction_loss
             + self.emb_lambda * self.embedding_loss
-            + self.bad_behavior_lambda * self.bad_behavior_loss
+            #+ self.bad_behavior_lambda * self.bad_behavior_loss
         )
 
     def determine_bad_behavior(self, true, pred, sample_weight=None):
@@ -361,13 +361,20 @@ class DraftBot(tf.Module):
         compute top1, top2, top3 accuracy to display as metrics during training when verbose=True
         """
         if sample_weight is None:
-            sample_weight = tf.ones_like(true.shape) / (true.shape[0] * true.shape[1])
-        # TODO: this caused a shape error, but didn't previously. Look into in detail later, comment out for now.
-        # sample_weight = sample_weight.flatten()
+            sample_weight = tf.ones_like(true) / (true.shape[0] * true.shape[1])
+        # since we don't use importance weighting, it will always use the above for sample_weight
+        
+        # depending on your python/tensorflow/GPU, you might need to comment out this line:
+        #sample_weight = tf.reshape(sample_weight, [-1])
         pred, _ = pred
-        top1 = tf.reduce_sum(tf.keras.metrics.sparse_top_k_categorical_accuracy(true, pred, 1) * sample_weight)
-        top2 = tf.reduce_sum(tf.keras.metrics.sparse_top_k_categorical_accuracy(true, pred, 2) * sample_weight)
-        top3 = tf.reduce_sum(tf.keras.metrics.sparse_top_k_categorical_accuracy(true, pred, 3) * sample_weight)
+        
+        # also needed to cast dtypes here, otherwise we get type error
+        #top1 = tf.reduce_sum(tf.keras.metrics.sparse_top_k_categorical_accuracy(true, pred, 1) * sample_weight)
+        #top2 = tf.reduce_sum(tf.keras.metrics.sparse_top_k_categorical_accuracy(true, pred, 2) * sample_weight)
+        #top3 = tf.reduce_sum(tf.keras.metrics.sparse_top_k_categorical_accuracy(true, pred, 3) * sample_weight)
+        top1 = tf.reduce_sum(tf.cast(tf.keras.metrics.sparse_top_k_categorical_accuracy(true, pred, 1), tf.float32) * tf.cast(sample_weight, tf.float32))
+        top2 = tf.reduce_sum(tf.cast(tf.keras.metrics.sparse_top_k_categorical_accuracy(true, pred, 2), tf.float32) * tf.cast(sample_weight, tf.float32))
+        top3 = tf.reduce_sum(tf.cast(tf.keras.metrics.sparse_top_k_categorical_accuracy(true, pred, 3), tf.float32) * tf.cast(sample_weight, tf.float32))       
         return {"top1": top1, "top2": top2, "top3": top3}
 
     def save(self, location):

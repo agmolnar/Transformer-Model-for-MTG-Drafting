@@ -169,8 +169,11 @@ def load_draft_data(filename, cards):
     df = df.sort_values(by=["draft_id", "position"])
     return df
 
-
-def get_card_rating_data(expansion, endpoint=None, start=None, end=None, colors=None):
+def get_card_rating_data(expansion, endpoint=None, start="2022-09-01", end="2023-05-19", colors=None):
+# setting start and end date to None makes the API return 0 for all values
+# so use the line below to remove card ratings, and the one above to add card ratings (also change the dates depending on expansion)
+# note: this is only used to generate an expansion file with or without ratings
+#def get_card_rating_data(expansion, endpoint=None, start=None, end=None, colors=None):
     if endpoint is None:
         endpoint = f"https://www.17lands.com/card_ratings/data?expansion={expansion.upper()}&format=PremierDraft"
         if start is not None:

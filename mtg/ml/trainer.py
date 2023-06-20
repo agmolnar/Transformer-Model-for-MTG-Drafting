@@ -81,12 +81,17 @@ class Trainer:
         verbose=True,
         print_keys=[],
         only_val_metrics=False,
+        pruning=False,
+        train_batches=0,
     ):
         n_batches = (
             len(self.batch_ids) // batch_size
             if self.generator is None
             else len(self.generator)
         )
+        if pruning and train_batches > 0:
+            #n_batches = int(train_batches/(batch_size/32))
+            n_batches = train_batches
         end_at = self.epoch_n + n_epochs
         has_val = self.val_generator is not None or self.val_features is not None
         extra_metric_keys = self.model.metric_names[:]
@@ -170,6 +175,8 @@ class Trainer:
                         **{k: np.average(v) for k, v in extras.items()},
                         **{k: np.average(v) for k, v in extra_metrics.items()},
                     }
+                    if pruning:
+                        val_acc = extra_to_show["val_top1"]
                     if len(val_losses) > 0:
                         progress.set_postfix(
                             loss=np.average(losses),
@@ -199,3 +206,5 @@ class Trainer:
                 self.generator.on_epoch_end()
             if self.val_generator is not None:
                 self.val_generator.on_epoch_end()
+        if pruning:
+            return val_acc
