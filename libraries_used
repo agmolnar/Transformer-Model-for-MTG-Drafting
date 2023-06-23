@@ -1,0 +1,14 @@
+Python 3.9.13
+
+Libraries:
+numpy 1.23.5
+pandas 1.5.2
+scikit-learn 1.0.2
+ipykernel 6.15.2
+jupyter 1.0.0
+matplotlib 3.5.3
+tensorflow 2.11.0
+tqdm 4.64.1
+
+For Siamese model:
+pytorch 1.13.0

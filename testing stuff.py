@@ -12,12 +12,12 @@ df = pickle.load(open("mtg/data/expansiontrain_full.pkl", 'rb'))
 df.get_mapping("idx", "name", include_basics=False)
 df2 = pickle.load(open("mtg/data/expansiontest_fullfixed.pkl", 'rb'))
 df2.get_mapping("idx", "name", include_basics=False)
-
+df2.cards.columns
 column_order = df.draft.columns
 df2.draft = df2.draft.reindex(columns=column_order)
 df.draft.columns[11:]
 df2.draft.columns[11:]
-
+df.draft
 sum(df.cards["idx"] == df2.cards["idx"])
 sum(df.cards["name"] == df2.cards["name"])
 df.cards.columns
@@ -126,7 +126,7 @@ from mtg.ml.display import draft_log_ai
 
 redraft = draft_log_ai(
     "https://www.17lands.com/draft/65a6fe63104645ea9440e3bab68f565b",
-    draft_model,
+    model,
     expansion,
     batch_size=1,
     token="5e9200e8034842f0bb75ed0ad50dfc51",
