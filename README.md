@@ -2,9 +2,13 @@
 The purpose is to allow the model to be trained, optimized and evaluated with different datasets and parameters, enabling model comparison.
 
 -Added hyperparameter optimization file
+
 -Added model evaluation file
+
 -Modified generator to allow for external/custom train/test/val datasets
+
 -Modified trainer to allow for disabling 17lands card performance data and scryfall card properties data.
+
 
 # mtg
 
